@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+#
+# Usage: jenv vars
+#
+# Prints all jenv-vars environment variables applicable to the
+# current working directory in the order they will be set. The output
+# format is a script that may be passed to `eval` in a Bourne-
+# compatible shell.
+#
+# For more information on jenv-vars, see:
+# https://github.com/sstephenson/jenv-vars#readme
+
+set -e
+[ -n "$jenv_DEBUG" ] && set -x
+
+if [ -z "$jenv_DIR" ]; then
+  export jenv_DIR="$(pwd)"
+fi
+
+if [ "$1" = "--version" ] || [ "$1" = "-v" ]; then
+  echo "jenv-archetype 1.2.0"
+  exit
+fi
+
+if [ "$1" == '--help' ]; then
+    #'<,'>!fmt -w 60   formatador
+    cat <<-EOF
+---------------------------------------------------
+Lista catálogo
+
+    Usage: jenv registry '[options]'
+
+Exemplo
+
+    docker pull dev:5000/ubuntu:18.04
+EOF
+fi
+
+
+catalogo=$(
+    curl -qk https://dev:5000/v2/_catalog |
+        jq .repositories[] |
+        fzf-tmux -l 100% --multi --reverse --query="$1" --select-1 --exit-0
+)
+
+if [[ ! -z $catalogo ]]; then
+
+    cmd=$(echo \
+        curl -k https://dev:5000/v2/${catalogo}/tags/list |
+        sed 's|"||g')
+
+    echo $cmd | tee >(xclip -i -selection clipboard)
+
+    eval $(xclip -selection clipboard -o) | jq
+
+    eval $(xclip -selection clipboard -o) |
+        jq -r '.name,.tags[]' |
+        sed  \
+        -e '1h;{p;G}' \
+        -e'2,$s=\(.*\)\n\(.*\)=\tdocker pull registry.local:5000/\2:\1=' \
+        -e '/docker/!d'
+
+# $ cat frutas.txt
+# frutas
+# abacate
+# ameixa
+# acerola
+# abacaxi
+# açai
+# banana
+# $ sed  -e '1h;{p;G}'             \
+# -e'2,$s=\(.*\)\n\(.*\)=\t\2:\1=' \
+# -e '/:/!d' frutas.txt
+# frutas
+# abacate
+#        frutas:abacate
+# ameixa
+#        frutas:ameixa
+# acerola
+#        frutas:acerola
+# abacaxi
+#        frutas:abacaxi
+# açai
+#        frutas:açai
+# banana
+#        frutas:banana
+
+
+    # capturo o primeiro valor e uso para contruir a url do docker
+    #
+    #
+    #NOTA:  $ cat ss| jq -r '.name,.tags[]' |
+    #   sed  -e 's/^.*/<&>/'
+    #        -e '1h;{p;G}'
+    #        -e'2,$s=\(.*\)\n\(.*\)=docker pull registry.local:5000/\2:\1='
+
+fi
